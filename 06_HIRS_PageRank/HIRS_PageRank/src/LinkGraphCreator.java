@@ -28,11 +28,12 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
 public class LinkGraphCreator extends Configured implements Tool {
 
-    public static class LGCMapper extends Mapper<LongWritable, Text, Text, Text> {
+    public static class LGCMapper extends Mapper<LongWritable, Text, Text, FSContainer> {
         private Map<Integer, String> urlsMap = new HashMap<>();
         private DefaultCodec codec;
         private Decompressor decompressor;
@@ -78,19 +79,21 @@ public class LinkGraphCreator extends Configured implements Tool {
             // получение ссылок из html
             Document doc = Jsoup.parse(html);
             Elements links = doc.select("a[href]");
+            HashSet<String> slinks = new HashSet<String>();
             for(Element element: links) {
                 String link = element.attr("href").toString();
                 if (UrlHandler.checkHost(link)) {
                     link = UrlHandler.toStandart(link);
-                    context.write(urlText, new Text(link));
+                    slinks.add(link);
                 } else {
                     String absLink = UrlHandler.absoluteUrl(url, link);
                     if (absLink != null && UrlHandler.checkHost(absLink)) {
                         absLink = UrlHandler.toStandart(absLink);
-                        context.write(urlText, new Text(absLink));
+                        slinks.add(absLink);
                     }
                 }
             }
+            context.write(urlText, new FSContainer(null, new ArrayList<>(slinks)));
         }
 
         private class PageDecoder {
@@ -131,9 +134,14 @@ public class LinkGraphCreator extends Configured implements Tool {
             private static String pat1To = new String("http://");
             private static String pat2From = new String("/+$");
             private static String pat2To = new String("");
+            private static String pat3From = new String("\n");
+            private static String pat3To = new String("");
+
             public static String toStandart(String inUrl) {
                 String outUrl = inUrl.replaceAll(pat1From, pat1To);
                 outUrl = outUrl.replaceAll(pat2From, pat2To);
+                outUrl = outUrl.replaceAll(pat3From, pat3To);
+                outUrl = outUrl.trim();
                 return outUrl;
             }
             public static String absoluteUrl(String parUrl, String relUrl) {
@@ -159,14 +167,14 @@ public class LinkGraphCreator extends Configured implements Tool {
         }
     }
 
-    public static class LGCReducer extends Reducer<Text, Text, Text, FSContainer> {
+    public static class LGCReducer extends Reducer<Text, FSContainer, Text, FSContainer> {
         @Override
-        protected void reduce(Text key,  Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            ArrayList<String> array = new ArrayList<>();
-            for(Text value: values) {
-                array.add(value.toString());
+        protected void reduce(Text key,  Iterable<FSContainer> values, Context context) throws IOException, InterruptedException {
+            HashSet<String> links = new HashSet<>();
+            for(FSContainer value: values) {
+                links.addAll(value.getArray());
             }
-            context.write(key, new FSContainer(null, array));
+            context.write(key, new FSContainer(null, new ArrayList<>(links)));
         }
     }
 
@@ -178,7 +186,7 @@ public class LinkGraphCreator extends Configured implements Tool {
         TextOutputFormat.setOutputPath(job, new Path(output));
         job.setMapperClass(LGCMapper.class);
         job.setMapOutputKeyClass(Text.class);
-        job.setMapOutputValueClass(Text.class);
+        job.setMapOutputValueClass(FSContainer.class);
         job.setReducerClass(LGCReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(FSContainer.class);
@@ -199,6 +207,7 @@ public class LinkGraphCreator extends Configured implements Tool {
 
     static String urlName = new String("./urls.txt");
     static String dataName = new String("./docs-000.txt");
+
     public static void help(String[] args) throws IOException, URISyntaxException {
         Path dataPath = new Path(dataName);
         FileSystem fileSystem = FileSystem.get(new Configuration());
