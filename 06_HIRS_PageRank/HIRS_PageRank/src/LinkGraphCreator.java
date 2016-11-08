@@ -2,13 +2,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.compress.CodecPool;
-import org.apache.hadoop.io.compress.CompressionInputStream;
-import org.apache.hadoop.io.compress.Decompressor;
-import org.apache.hadoop.io.compress.GzipCodec;
+import org.apache.hadoop.io.compress.*;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -36,16 +32,11 @@ import java.util.Map;
 
 public class LinkGraphCreator extends Configured implements Tool {
 
-
-    public static class LGCMapper extends Mapper<LongWritable, Text, IntWritable, IntWritable> {
-        private static final int DEFAULT_BUFFER_SIZE = 64 * 1024;
-        private Map<String, Integer> urlsMap = new HashMap<>();
-        private GzipCodec codec;
+    public static class LGCMapper extends Mapper<LongWritable, Text, Text, Text> {
+        private Map<Integer, String> urlsMap = new HashMap<>();
+        private DefaultCodec codec;
         private Decompressor decompressor;
-        private Text htmlText;
-        private byte[] buffer;
-        private static String rightHost = new String("lenta.ru");
-
+        private PageDecoder pageDecoder;
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
@@ -62,17 +53,16 @@ public class LinkGraphCreator extends Configured implements Tool {
                     }
                     String parts[] = line.toString().split("\t");
                     int id = Integer.valueOf(parts[0]);
-                    String path = (new URL(parts[1])).getPath();
-                    urlsMap.put(path, id);
+                    String url =  UrlHandler.toStandart(parts[1]);
+                    urlsMap.put(id, url);
                 }
             } finally {
                 reader.close();
             }
-            codec = new GzipCodec();
+            codec = new DefaultCodec();
             codec.setConf(fileSystem.getConf());
             decompressor = CodecPool.getDecompressor(codec);
-            buffer = new byte[DEFAULT_BUFFER_SIZE];
-            htmlText = new Text();
+            pageDecoder = new PageDecoder(decompressor);
         }
 
         @Override
@@ -80,60 +70,103 @@ public class LinkGraphCreator extends Configured implements Tool {
             // декодирование html
             String[] parts = value.toString().split("\t");
             Integer htmlId = Integer.valueOf(parts[0]);
+            String url = UrlHandler.toStandart(urlsMap.get(htmlId));
+            Text urlText = new Text(url);
             String base64string = parts[1];
-            String html = decodeBase64(base64string);
+            String html = pageDecoder.decodeBase64(base64string);
 
             // получение ссылок из html
             Document doc = Jsoup.parse(html);
             Elements links = doc.select("a[href]");
             for(Element element: links) {
                 String link = element.attr("href").toString();
-                Integer id = findLink(link);
-                if (id != null) {
-                    context.write(new IntWritable(htmlId), new IntWritable(id));
+                if (UrlHandler.checkHost(link)) {
+                    link = UrlHandler.toStandart(link);
+                    context.write(urlText, new Text(link));
+                } else {
+                    String absLink = UrlHandler.absoluteUrl(url, link);
+                    if (absLink != null && UrlHandler.checkHost(absLink)) {
+                        absLink = UrlHandler.toStandart(absLink);
+                        context.write(urlText, new Text(absLink));
+                    }
                 }
             }
         }
 
-        private String decodeBase64(String base64string) throws IOException {
-            byte[] gzipHtml = DatatypeConverter.parseBase64Binary(base64string);
-            CompressionInputStream compessStream = codec.createInputStream(new ByteArrayInputStream(gzipHtml), decompressor);
-            htmlText.clear();
-            int  readBytes = 0;
-            while(true) {
+        private class PageDecoder {
+            private static final int DEFAULT_BUFFER_SIZE = 64 * 1024;
+            private byte[] buffer;
+            private Text htmlText;
+            private Decompressor decompressor;
+
+            public PageDecoder(Decompressor _decomp) throws IOException {
+                decompressor = _decomp;
+                buffer = new byte[DEFAULT_BUFFER_SIZE];
+                htmlText = new Text();
+            }
+
+            String decodeBase64(String base64string) throws IOException {
+                byte[] gzipHtml = DatatypeConverter.parseBase64Binary(base64string);
+                CompressionInputStream compessStream = codec.createInputStream(new ByteArrayInputStream(gzipHtml), decompressor);
+                htmlText.clear();
+                int readBytes = 0;
+                while (true) {
+                    try {
+                        readBytes = compessStream.read(buffer);
+                        if (readBytes <= 0)
+                            break; // EOF
+                        htmlText.append(buffer, 0, readBytes);
+                    } catch (EOFException eof) {
+                        break;
+                    }
+                }
+                compessStream.close();
+                return htmlText.toString();
+            }
+        }
+
+        private static class UrlHandler {
+            private static String rightHost = new String("lenta.ru");
+            private static String pat1From = new String("^https://");
+            private static String pat1To = new String("http://");
+            private static String pat2From = new String("/+$");
+            private static String pat2To = new String("");
+            public static String toStandart(String inUrl) {
+                String outUrl = inUrl.replaceAll(pat1From, pat1To);
+                outUrl = outUrl.replaceAll(pat2From, pat2To);
+                return outUrl;
+            }
+            public static String absoluteUrl(String parUrl, String relUrl) {
                 try {
-                    readBytes = compessStream.read(buffer);
-                    if (readBytes <= 0)
-                        break; // EOF
-                    htmlText.append(buffer, 0, readBytes);
-                } catch (EOFException eof) {
-                    break;
+                    URL url = new URL(new URL(parUrl), relUrl);
+                    return url.toString();
+                } catch (MalformedURLException e) {
+                    return null;
                 }
             }
-            compessStream.close();
-            return htmlText.toString();
-        }
-
-        private Integer findLink(String link) {
-            try {
-                URL linkUrl = new URL(link);
-                if (linkUrl.getHost() == rightHost) {
-                    return urlsMap.get(linkUrl.getPath());
+            public static boolean checkHost(String inUrl) {
+                try {
+                    URL url = new URL(inUrl);
+                    if (url.getHost().compareTo(rightHost) == 0) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                } catch (MalformedURLException e) {
+                    return false;
                 }
-            } finally {
-                return urlsMap.get(link);
             }
         }
     }
 
-    public static class LGCReducer extends Reducer<IntWritable, IntWritable, IntWritable,  NumberContainer> {
+    public static class LGCReducer extends Reducer<Text, Text, Text, FSContainer> {
         @Override
-        protected void reduce(IntWritable key,  Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            ArrayList<Integer> array = new ArrayList<>();
-            for(IntWritable value: values) {
-                array.add(new Integer(value.get()));
+        protected void reduce(Text key,  Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            ArrayList<String> array = new ArrayList<>();
+            for(Text value: values) {
+                array.add(value.toString());
             }
-            context.write(key, new NumberContainer(null, array));
+            context.write(key, new FSContainer(null, array));
         }
     }
 
@@ -144,11 +177,11 @@ public class LinkGraphCreator extends Configured implements Tool {
         TextInputFormat.addInputPath(job, new Path(input));
         TextOutputFormat.setOutputPath(job, new Path(output));
         job.setMapperClass(LGCMapper.class);
-        job.setMapOutputKeyClass(IntWritable.class);
-        job.setMapOutputValueClass(IntWritable.class);
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(Text.class);
         job.setReducerClass(LGCReducer.class);
-        job.setOutputKeyClass(IntWritable.class);
-        job.setOutputValueClass(NumberContainer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(FSContainer.class);
         return job;
     }
 
