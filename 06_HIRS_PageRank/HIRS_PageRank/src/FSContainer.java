@@ -5,24 +5,24 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
-/**
- * Created by nina on 07.11.16.
- */
 public class FSContainer implements WritableComparable<FSContainer> {
     private Float value;
-    private ArrayList<String> array;
+    private List<String> array;
 
     FSContainer() {
         value = null;
         array = null;
     }
-    FSContainer(Float _value, ArrayList<String> _array) {
+    FSContainer(Float _value, List<String> _array) {
         value = _value;
         array = _array;
     }
 
     FSContainer(String _value, String _array) {
+        _value = _value.trim();
+        _array = _array.trim();
         String nullString = new String("");
         if (_value.compareTo(nullString) != 0) {
             value = Float.valueOf(_value);
@@ -33,16 +33,20 @@ public class FSContainer implements WritableComparable<FSContainer> {
         if (_array.compareTo(nullString) != 0) {
             // Удаление скобок [ ]
             _array = _array.substring(1, _array.length() - 1);
-            array = new ArrayList<String>(Arrays.asList(_array.split(", ")));
+            if (_array.trim().compareTo(nullString) != 0) {
+                array = new ArrayList<>(Arrays.asList(_array.split(", ")));
+            } else {
+                array = new ArrayList<>();
+            }
         } else {
             array = null;
         }
     }
 
     Float getValue() { return value; }
-    ArrayList<String> getArray() { return array; }
+    List<String> getList() { return array; }
     void setValue(Float _val) { value = _val; }
-    void setArray(ArrayList<String> _ar) { array = _ar; }
+    void setList(ArrayList<String> _ar) { array = _ar; }
 
 
     @Override

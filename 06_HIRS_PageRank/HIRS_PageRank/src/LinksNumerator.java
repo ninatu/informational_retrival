@@ -9,12 +9,13 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class LinksNumerator {
 
-    private static HashMap<String, Integer> numerateLinks(LineReader reader, BufferedWriter writer) throws IOException {
-        HashMap<String, Integer> urlMap = new HashMap<>();
+    private static Map<String, Integer> numerateLinks(LineReader reader, BufferedWriter writer) throws IOException {
+        Map<String, Integer> urlMap = new HashMap<>();
         Integer count = new Integer(0);
         String linksFormat = new String("%s\t%s\n");
         Text line = new Text();
@@ -35,14 +36,14 @@ public class LinksNumerator {
             String sValue = parts[1];
             String sArray = parts[2];
             FSContainer cont = new FSContainer(sValue, sArray);
-            ArrayList<String> outUrls = cont.getArray();
+            List<String> outUrls = cont.getList();
             Integer nInUrl = urlMap.get(inUrl);
             if (nInUrl == null) {
                 nInUrl = new Integer(count);
                 urlMap.put(inUrl, nInUrl);
                 count ++;
             }
-            ArrayList<String> numbsUrls = new ArrayList<>();
+            List<String> numbsUrls = new ArrayList<>();
             for(String outUrl: outUrls) {
                 Integer nOutUrl = urlMap.get(outUrl);
                 if (nOutUrl == null) {

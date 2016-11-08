@@ -14,6 +14,7 @@ import org.apache.hadoop.util.ToolRunner;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 public class HITS extends Configured implements Tool{
 
@@ -37,14 +38,15 @@ public class HITS extends Configured implements Tool{
 
             // Если это не первая итерация, рассылаем авторитетность и хабность
             if (cont.getValue() != null) {
-                ArrayList<String> array = cont.getArray();
+                List<String> array = cont.getList();
                 String ind = array.remove(0);
-                ArrayList<String> urls = array;
+                List<String> urls;
+                urls = array;
                 Float val = cont.getValue();
 
                 //  "H" - хабность
                 if (ind.compareTo(H) == 0) {
-                    ArrayList<String> newHub = new ArrayList<>();
+                    List<String> newHub = new ArrayList<>();
                     newHub.add(H);
                     newHub.add(url);
                     FSContainer hub = new FSContainer(val, newHub);
@@ -64,7 +66,7 @@ public class HITS extends Configured implements Tool{
                 }
             } else {
                 // Если это первая итерация, инициализируем авторитетность и хабность
-                ArrayList<String> urls = cont.getArray();
+                List<String> urls = cont.getList();
                 Float one = new Float(1);
 
                 //  "H" - хабность
@@ -100,7 +102,7 @@ public class HITS extends Configured implements Tool{
             hubList.add(H);
 
             for (FSContainer value: values) {
-                ArrayList<String> array = value.getArray();
+                List<String> array = value.getList();
                 String ind = array.remove(0);
                 if (ind.compareTo(A) == 0) {
                     hubth += value.getValue();
@@ -138,13 +140,15 @@ public class HITS extends Configured implements Tool{
         String out_dir = args[1];
 
         Integer iterationCount = 5;
-        String prevDir = input;
         ControlledJob []steps = new ControlledJob[5];
-        for(Integer i = 0; i < iterationCount; i++) {
+
+        steps[0] = new ControlledJob(getConf());
+        steps[0].setJob(getJobConf(input, out_dir + "/step0"));
+        for(Integer i = 1; i < iterationCount; i++) {
+            String inStepDir = out_dir + "/step" + (new Integer(i - 1)).toString();
             String outStepDir = out_dir + "/step" + i.toString();
             steps[i] = new ControlledJob(getConf());
-            steps[i].setJob(getJobConf(prevDir + "/part-r-*", outStepDir));
-            prevDir = outStepDir;
+            steps[i].setJob(getJobConf(inStepDir, outStepDir));
         }
 
         JobControl control = new JobControl(HITS.class.getCanonicalName());

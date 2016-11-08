@@ -207,7 +207,7 @@ public class LinkGraphCreator2 extends Configured implements Tool {
         }
         System.err.println(html.toString());
     }
-    public static void main(String[] args) throws MalformedURLException {
+    public static void help3(String[] args) throws MalformedURLException {
         String xurl = new String("https://age.lenta.ru/news/2013/01/02/enc/?height=450&iframe=true&width=900////");
 
         String relPath = new String("https://blabla.ru/rubrics/culture/");
@@ -220,6 +220,13 @@ public class LinkGraphCreator2 extends Configured implements Tool {
         String absUrl = UrlHandler.absoluteUrl(surl, relPath);
         System.err.println(UrlHandler.toStandart(absUrl));
 
+    }
+
+    public static void main(String[] args) {
+        ArrayList<String> l = new ArrayList<>();
+        String a = l.toString();
+
+        System.err.println(a.substring(1, a.length() - 1).split(", ").length);
     }
     private static class UrlHandler {
         private static String rightHost = new String("lenta.ru");

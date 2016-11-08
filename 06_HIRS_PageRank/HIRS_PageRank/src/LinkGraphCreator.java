@@ -172,7 +172,7 @@ public class LinkGraphCreator extends Configured implements Tool {
         protected void reduce(Text key,  Iterable<FSContainer> values, Context context) throws IOException, InterruptedException {
             HashSet<String> links = new HashSet<>();
             for(FSContainer value: values) {
-                links.addAll(value.getArray());
+                links.addAll(value.getList());
             }
             context.write(key, new FSContainer(null, new ArrayList<>(links)));
         }
