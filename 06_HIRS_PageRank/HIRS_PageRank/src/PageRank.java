@@ -106,6 +106,7 @@ public class PageRank extends Configured implements Tool {
     }
 
     public Job getJobConf(String input, String output) throws IOException {
+
         Job job = Job.getInstance(getConf());
         job.setJarByClass(PageRank.class);
         job.setJobName(PageRank.class.getCanonicalName());
