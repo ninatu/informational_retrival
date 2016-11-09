@@ -24,12 +24,8 @@ import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 
 public class LinkGraphCreator extends Configured implements Tool {
 
@@ -79,7 +75,8 @@ public class LinkGraphCreator extends Configured implements Tool {
             // получение ссылок из html
             Document doc = Jsoup.parse(html);
             Elements links = doc.select("a[href]");
-            HashSet<String> slinks = new HashSet<String>();
+            // HashSet<String> slinks = new HashSet<String>();
+            List<String> slinks = new ArrayList<>();
             for(Element element: links) {
                 String link = element.attr("href").toString();
                 if (UrlHandler.checkHost(link)) {
@@ -93,7 +90,8 @@ public class LinkGraphCreator extends Configured implements Tool {
                     }
                 }
             }
-            context.write(urlText, new FSContainer(null, new ArrayList<>(slinks)));
+            context.write(urlText, new FSContainer(null, slinks));
+            //context.write(urlText, new FSContainer(null, new ArrayList<>(slinks)));
         }
 
         private class PageDecoder {
@@ -202,49 +200,5 @@ public class LinkGraphCreator extends Configured implements Tool {
     static public void main(String[] args) throws Exception {
         int ret = ToolRunner.run(new LinkGraphCreator(), args);
         System.exit(ret);
-    }
-
-
-    static String urlName = new String("./urls.txt");
-    static String dataName = new String("./docs-000.txt");
-
-    public static void help(String[] args) throws IOException, URISyntaxException {
-        Path dataPath = new Path(dataName);
-        FileSystem fileSystem = FileSystem.get(new Configuration());
-        LineReader reader = new LineReader(fileSystem.open(dataPath));
-
-        GzipCodec codec = new GzipCodec();
-        codec.setConf(fileSystem.getConf());
-        Decompressor decompressor = CodecPool.getDecompressor(codec);
-
-        Text text = new Text();
-        reader.readLine(text);
-        String parts[] = text.toString().split("\t");
-        String base64string = parts[1];
-
-        byte[] gzipHtml = DatatypeConverter.parseBase64Binary(base64string);
-        CompressionInputStream compessStream= codec.createInputStream(new ByteArrayInputStream(gzipHtml), decompressor);
-
-        byte[] buffer = new byte[64 * 1024];
-        Text html = new Text();
-        int  readBytes = 0;
-        while(true) {
-            try {
-                readBytes = compessStream.read(buffer);
-                if (readBytes <= 0)
-                    break; // EOF
-                html.append(buffer, 0, readBytes);
-            } catch (EOFException eof) {
-                break;
-            }
-        }
-        compessStream.close();
-
-        Document doc = Jsoup.parse(html.toString());
-        Elements links = doc.select("a[href]");
-        for(Element link :links) {
-            System.err.println(link.attr("href").toString());
-        }
-        System.err.println(html.toString());
     }
 }
