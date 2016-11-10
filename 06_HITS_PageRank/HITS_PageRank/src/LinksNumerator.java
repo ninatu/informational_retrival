@@ -63,6 +63,10 @@ public class LinksNumerator {
 
 
     public static void main(String[] args) throws IOException {
+        if (args.length != 1) {
+            System.err.println("Usage: inksNumerator path_to_file");
+            return;
+        }
         String input = args[0];
         FileSystem fileSystem = FileSystem.get(new Configuration());
         Path inPath = new Path(input);

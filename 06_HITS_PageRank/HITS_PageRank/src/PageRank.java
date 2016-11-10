@@ -157,17 +157,14 @@ public class PageRank extends Configured implements Tool {
             float prevRank = cont.getValue();
             float newRank = alpha * (prevRank + leftRank / N) + (1 - alpha) / N;
             cont.setValue(new Float(newRank));
-            context.getCounter("COMMON_COUNTERS", "MapperCall").increment(1);
             context.write(textUrl, cont);
         }
     }
     protected static class PRReducerStep2 extends Reducer<Text, FSContainer, Text, FSContainer> {
         @Override
         protected void reduce(Text key, Iterable<FSContainer> values, Context context) throws IOException, InterruptedException {
-            context.getCounter("COMMON_COUNTERS", "ReducerCall").increment(1);
             for(FSContainer value: values) {
                 context.write(key, value);
-                context.getCounter("COMMON_COUNTERS", "ReducerIterate").increment(1);
             }
         }
     }
@@ -179,7 +176,7 @@ public class PageRank extends Configured implements Tool {
 
         FileInputFormat.addInputPath(job, new Path(input));
         FileOutputFormat.setOutputPath(job, new Path(output));
-        job.getConfiguration().setInt(NLineInputFormat.LINES_PER_MAP, 50000);
+        job.getConfiguration().setInt(NLineInputFormat.LINES_PER_MAP, 100000);
 
         job.setMapperClass(PageRank.PRMapperStep1.class);
         job.setCombinerClass(PageRank.PRCombinerStep1.class);
@@ -200,7 +197,7 @@ public class PageRank extends Configured implements Tool {
 
         FileInputFormat.addInputPath(job, new Path(input));
         FileOutputFormat.setOutputPath(job, new Path(output));
-        job.getConfiguration().setInt(NLineInputFormat.LINES_PER_MAP, 100000);
+        job.getConfiguration().setInt(NLineInputFormat.LINES_PER_MAP, 200000);
 
         job.setMapperClass(PageRank.PRMapperStep2.class);
         job.setReducerClass(PageRank.PRReducerStep2.class);
@@ -220,7 +217,7 @@ public class PageRank extends Configured implements Tool {
         String out_dir = args[1];
         Configuration conf = getConf();
 
-        Integer iterationCount = 5;
+        Integer iterationCount = 50;
         ControlledJob[]steps = new ControlledJob[iterationCount * 2];
         //ControlledJob[]steps = new ControlledJob[iterationCount];
 

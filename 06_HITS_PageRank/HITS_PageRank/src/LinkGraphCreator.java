@@ -75,7 +75,6 @@ public class LinkGraphCreator extends Configured implements Tool {
             // получение ссылок из html
             Document doc = Jsoup.parse(html);
             Elements links = doc.select("a[href]");
-            // HashSet<String> slinks = new HashSet<String>();
             List<String> slinks = new ArrayList<>();
             for(Element element: links) {
                 String link = element.attr("href").toString();
@@ -91,7 +90,6 @@ public class LinkGraphCreator extends Configured implements Tool {
                 }
             }
             context.write(urlText, new FSContainer(null, slinks));
-            //context.write(urlText, new FSContainer(null, new ArrayList<>(slinks)));
         }
 
         private class PageDecoder {
@@ -168,11 +166,11 @@ public class LinkGraphCreator extends Configured implements Tool {
     public static class LGCReducer extends Reducer<Text, FSContainer, Text, FSContainer> {
         @Override
         protected void reduce(Text key,  Iterable<FSContainer> values, Context context) throws IOException, InterruptedException {
-            HashSet<String> links = new HashSet<>();
+            List<String> links = new ArrayList<>();
             for(FSContainer value: values) {
                 links.addAll(value.getList());
             }
-            context.write(key, new FSContainer(null, new ArrayList<>(links)));
+            context.write(key, new FSContainer(null, links));
         }
     }
 

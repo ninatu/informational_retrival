@@ -38,7 +38,6 @@ public class TopN {
         int curCount = 0;
         Float nthKey = new Float(1);
         for (Map.Entry<Float,String> entry: sortedPairs.entrySet()) {
-            //System.err.println(entry.getKey() + " " + entry.getValue());
             if (curCount == N) {
                 nthKey = entry.getKey();
                 break;
@@ -69,6 +68,8 @@ public class TopN {
         Map<String, String> urlsMap = new TreeMap<>();
         LineReader urlsReader = new LineReader(fileSystem.open(new Path(urlsName)));
         Text line = new Text();
+        // считываем строку в которой записано кол-во
+        urlsReader.readLine(line);
         while (true) {
             line.clear();
             int readBytes = urlsReader.readLine(line);

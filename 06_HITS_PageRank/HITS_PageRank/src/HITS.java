@@ -1,12 +1,15 @@
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.NLineInputFormat;
 import org.apache.hadoop.mapreduce.lib.jobcontrol.ControlledJob;
 import org.apache.hadoop.mapreduce.lib.jobcontrol.JobControl;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -67,7 +70,6 @@ public class HITS extends Configured implements Tool{
             } else {
                 // Если это первая итерация, инициализируем авторитетность и хабность
                 List<String> urls = cont.getList();
-                Float one = new Float(1);
 
                 //  "H" - хабность
                 ArrayList<String> newHub = new ArrayList<>();
@@ -86,6 +88,34 @@ public class HITS extends Configured implements Tool{
                 FSContainer authority = new FSContainer(count, newAuth);
                 context.write(textUrl, authority);
             }
+        }
+    }
+    protected static class HITSCombiner extends Reducer<Text, FSContainer, Text, FSContainer> {
+        @Override
+        protected void reduce(Text key, Iterable<FSContainer> values, Context context) throws IOException, InterruptedException {
+            float auth = 0;
+            float hubth = 0;
+            ArrayList<String> authList = new ArrayList<>();
+            ArrayList<String> hubList = new ArrayList<>();
+            String A = new String("A");
+            String H = new String("H");
+            authList.add(A);
+            hubList.add(H);
+
+            for (FSContainer value: values) {
+                List<String> array = value.getList();
+                String ind = array.remove(0);
+                if (ind.compareTo(H) == 0) {
+                    hubth += value.getValue();
+                    hubList.addAll(array);
+                }
+                if (ind.compareTo(A) == 0) {
+                    auth += value.getValue();
+                    authList.addAll(array);
+                }
+            }
+            context.write(key, new FSContainer(new Float(auth), authList));
+            context.write(key, new FSContainer(new Float(hubth), hubList));
         }
     }
 
@@ -122,12 +152,18 @@ public class HITS extends Configured implements Tool{
         Job job = Job.getInstance(getConf());
         job.setJarByClass(HITS.class);
         job.setJobName(HITS.class.getCanonicalName());
-        TextInputFormat.addInputPath(job, new Path(input));
-        TextOutputFormat.setOutputPath(job, new Path(output));
+        FileInputFormat.addInputPath(job, new Path(input));
+        FileOutputFormat.setOutputPath(job, new Path(output));
+        job.getConfiguration().setInt(NLineInputFormat.LINES_PER_MAP, 500000);
+
         job.setMapperClass(HITS.HITSMapper.class);
+        job.setCombinerClass(HITS.HITSCombiner.class);
+        job.setReducerClass(HITS.HITSReduser.class);
+
+        job.setInputFormatClass(NLineInputFormat.class);
+        job.setOutputFormatClass(TextOutputFormat.class);
         job.setMapOutputKeyClass(Text.class);
         job.setMapOutputValueClass(FSContainer.class);
-        job.setReducerClass(HITS.HITSReduser.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(FSContainer.class);
         return job;
@@ -136,18 +172,19 @@ public class HITS extends Configured implements Tool{
 
     @Override
     public int run(String[] args) throws Exception {
+        Configuration conf = getConf();
         String input = args[0];
         String out_dir = args[1];
 
-        Integer iterationCount = 5;
-        ControlledJob []steps = new ControlledJob[5];
+        Integer iterationCount = 7;
+        ControlledJob []steps = new ControlledJob[iterationCount];
 
-        steps[0] = new ControlledJob(getConf());
+        steps[0] = new ControlledJob(conf);
         steps[0].setJob(getJobConf(input, out_dir + "/step0"));
         for(Integer i = 1; i < iterationCount; i++) {
             String inStepDir = out_dir + "/step" + (new Integer(i - 1)).toString();
             String outStepDir = out_dir + "/step" + i.toString();
-            steps[i] = new ControlledJob(getConf());
+            steps[i] = new ControlledJob(conf);
             steps[i].setJob(getJobConf(inStepDir, outStepDir));
         }
 
@@ -162,7 +199,7 @@ public class HITS extends Configured implements Tool{
         new Thread(control).start();
         while (!control.allFinished()) {
             System.out.println("Still running...");
-            Thread.sleep(2000);
+            Thread.sleep(10000);
         }
         return control.getFailedJobList().isEmpty() ? 0 : 1;
     }
